@@ -7,7 +7,7 @@ This module is intended to make it simple to estimate intrinsic stellar properti
 
 The main module currently only requires that the usual Scipy stack is installed (e.g. [`scipy`](https://github.com/scipy/scipy), [`numpy`](https://github.com/numpy/numpy), [`matplotlib`](https://github.com/matplotlib/matplotlib)). However, note that to run the examples below you will also need to install Jo Bovy's [`gaia_tools`](https://github.com/jobovy/gaia_tools) module.
 
-### Installation
+#### Installation
 
 while `asteroestimate` is under development, to install, please use 
 ```

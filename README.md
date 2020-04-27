@@ -52,7 +52,7 @@ now we'll use the `from_phot` function in the `probability` module to get the es
 
 For this example, we will simply assume a mass of 0.9 Msun... We can also include here an estimate of the extinction toward the stars by providing the `AK=` keyword. At present, this is the K band extinction. 
 
-Furthermore, we will include here the length of the observations (in days) via the `T=` keyword. In our example, we assume a single TESS sector (27 days) and the full 4 year Kepler-Prime time series. We indicate the observation mode using the `obs=` keyword. This indicates the telescope and the cadence mode e.g. `'tess-ffi'` is the Full Frame Images (30min. cadence) from TESS. You can see the implemented observing mode using `probability.obs_available`.
+Furthermore, we will include here the length of the observations (in days) via the `T=` keyword. In our example, we assume a single TESS sector (27 days) and the full 4 year Kepler-Prime time series. We indicate the observation mode using the `obs=` keyword. This indicates the telescope and the cadence mode e.g. `'tess-ffi'` is the Full Frame Images (30min. cadence) from TESS. You can see the currently implemented observing modes using `probability.obs_available`.
 
 The final call for our examples are as follows:
 ```python

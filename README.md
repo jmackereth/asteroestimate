@@ -83,7 +83,7 @@ which will produce the following figure:
 
 <img src="readme_files/keplervstess.png" alt="kepler vs tess CMD" width=500px>
 
-We can see that TESS (on the left) has a quite constrained range of intrinsic brightness where oscillations will be detected. Kepler, on the other hand, does very well for bright giants, extending down as far as the main sequence! Note that this is highly simplistic, however, as we havent adjusted for extinction at all in making our predictions.
+We can see that TESS (on the left) has a quite constrained range of intrinsic brightness where oscillations will be detected. Kepler, on the other hand, does very well for bright giants, extending right down the RGB! Note that this is highly simplistic, however, as we havent adjusted for extinction at all in making our predictions.
 
 We can also look at the expected nu max for the stars by computing it using `numax_from_JHK`, which will use the same scaling relations to estimate nu_max from the 2MASS photometry:
 ```python

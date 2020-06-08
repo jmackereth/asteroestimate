@@ -10,6 +10,8 @@ teff_sun = 5777 # K
 taugran_sun = 210 # s
 teffred_sun = 8907 # K
 
+obs_available = ['kepler-sc', 'kepler-lc', 'tess-ffi']
+
 def from_phot(G, BP, RP, J, H, K, parallax, s=1., deltaT=1550., Amax_sun=2.5, obs='kepler-sc', T=30., pfalse=0.01, mass=1., AK=None, numax_limit=None, return_SNR=False):
     """
     Seismic detection probability from Gaia and 2MASS photometry (and Parallax)
@@ -30,6 +32,8 @@ def from_phot(G, BP, RP, J, H, K, parallax, s=1., deltaT=1550., Amax_sun=2.5, ob
     HISTORY:
         27/04/2020 - written - J T Mackereth (UoB)
     """
+    if obs not in obs_available:
+        raise IOError('%s is not currently implemented as an observation mode, check documentation or probability.obs_available for available modes.' % obskm)
     tlum = Kmag_to_lum(K, J-K, parallax, AK=AK, Mbol_sun=4.67) #luminosity in Lsun
     tteff = J_K_Teff(J-K) #teff in K
     trad = np.sqrt(tlum/(tteff/teff_sun)**4)
@@ -79,6 +83,37 @@ def numax_from_JHK(J, H, K, parallax, mass=1., return_samples=False, return_lum=
     tlum = Kmag_to_lum(K, J-K, parallax, AK=AK, Mbol_sun=4.67) #luminosity in Lsun
     tteff = J_K_Teff(J-K) #teff in K
     tteff /= teff_sun
+    trad = np.sqrt(tlum/tteff**4)
+    if isinstance(mass, (int, float,np.float32,np.float64)):
+        tmass = mass
+        tnumax = numax(tmass, tteff*teff_sun, trad)
+        return tnumax
+    elif mass == 'giants':
+        ndata = len(J)
+        msamples = np.random.lognormal(mean=np.log(1.2), sigma=0.4, size=ndata*100)#sample_kroupa(ndata*100)
+        tnumax = numax(msamples, np.repeat(tteff,100)*teff_sun, np.repeat(trad,100))
+        tnumax =  tnumax.reshape(ndata,100)
+        if return_samples:
+            return tnumax
+        return np.median(tnumax, axis=1)
+
+def numax_from_luminosity_teff(luminosity, teff, parallax, mass=1., return_samples=False, return_lum=False, AK=None):
+    """
+    predict frequency at maximum power from 2MASS photometry and Gaia parallax
+    INPUT:
+        luminosity - luminosity in L_sun
+        teff - effective temperature in K
+        mass - an estimate of the stellar mass, can either be a constant (float) for the whole sample, samples for each star based on some prior (N,N_samples), or use 'giants'/'dwarfs' for a prior for these populations
+        return_samples - return the samples of numax based on the input mass samples
+        return_lum - return the luminosity based on JHK photometry
+        AK - the K band extinction
+    OUTPUT:
+        numax - the predicted numax in uHz
+    HISTORY:
+        27/04/2020 - written - J T Mackereth (UoB)
+    """
+    tlum = luminosity #teff in K
+    tteff = teff/teff_sun
     trad = np.sqrt(tlum/tteff**4)
     if isinstance(mass, (int, float,np.float32,np.float64)):
         tmass = mass

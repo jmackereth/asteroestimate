@@ -26,12 +26,10 @@ def p_jhk(fullgrid, j,h,k,j_err,h_err,k_err, mask=None):
 
 def p_jminuskh(fullgrid, jk,h,jk_err,h_err, mask=None):
     "get the probability of each isochrone point for a given data point"
-    if mask is None:
-        mask = np.ones(len(fullgrid['J']), dtype=bool)
     mean = np.array([jk,h])
     cov = np.array([[jk_err**2,0],[0,h_err**2]])
     rv = multivariate_normal(mean, cov)
-    jhk_grid = np.dstack([fullgrid['J'][mask]-fullgrid['K'][mask], fullgrid['H'][mask]])[0]
+    jhk_grid = np.dstack([fullgrid['J']-fullgrid['K'], fullgrid['H'])[0]
     return rv.pdf(jhk_grid)
 
 def sample_from_grid_jhk(fullgrid, j,h,k,j_err,h_err,k_err, mask=None, N=100):
@@ -45,13 +43,11 @@ def sample_from_grid_jhk(fullgrid, j,h,k,j_err,h_err,k_err, mask=None, N=100):
     randinds = np.round(tinter(np.random.rand(N))).astype(np.int64)
     return fullgrid[mask][sort][randinds]
 
-def sample_from_grid_jminuskh(fullgrid, jk, h, jk_err,h_err, mask=None, N=100):
+def sample_from_grid_jminuskh(fullgrid, jk, h, jk_err,h_err, N=100):
     "sample from the isochrone grid around a point in 2MASS photometry"
-    probs = p_jminuskh(fullgrid, jk,h,jk_err,h_err, mask=mask)
-    if mask is None:
-        mask = np.ones(len(fullgrid['J']), dtype=bool)
-    weights = probs*(fullgrid['delta_M'][mask]*(fullgrid['age'][mask]/fullgrid['Z'][mask]))
+    probs = p_jminuskh(fullgrid, jk,h,jk_err,h_err)
+    weights = probs*(fullgrid['delta_M']*(fullgrid['age']/fullgrid['Z']))
     sort = np.argsort(weights)
     tinter = interp1d(np.cumsum(weights[sort])/np.sum(weights), range(len(weights[sort])), kind='linear')
     randinds = np.round(tinter(np.random.rand(N))).astype(np.int64)
-    return fullgrid[mask][sort][randinds]
+    return fullgrid[sort][randinds]

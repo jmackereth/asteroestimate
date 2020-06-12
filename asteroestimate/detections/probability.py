@@ -134,7 +134,7 @@ def from_grid(G, BP, RP, J, H, K, parallax, J_err, H_err, K_err, parallax_err, s
             if ptype == 'mags':
                 samples = grid.sample_from_grid_jhk(fullgrid,j[i],h[i],k[i],j_err[i],h_err[i],k_err[i], mask=None, N=N)
             if ptype == 'colormag':
-                samples = grid.sample_from_grid_jminuskh(fullgrid,jk[i],h[i], jk_err[i],h_err[i], mask=None, N=N)
+                samples = grid.sample_from_grid_jminuskh(fullgrid,jk[i],h[i], jk_err[i],h_err[i], N=N)
             snrtot = SNR_tot(tG, tBP, tRP, tJ, tH, tK, samples['luminosity'], samples['M_act'], samples['teff'], samples['radius'], samples['numax'], s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
             tprobs = prob(snrtot,samples['numax'],np.repeat(T[i],N),pfalse)
             if return_samples:

@@ -1,8 +1,12 @@
 import numpy as np
-from scipy.stats import chi2
+from scipy.stats import chi2, multivariate_normal, norm
 from scipy.interpolate import interp1d
 import asteroestimate.detections.noise as noise
 import asteroestimate.bolometric.polynomial as polybcs
+import asteroestimate.parsec.grid as grid
+import tqdm
+from multiprocessing import Pool, cpu_count
+from functools import partial
 
 numax_sun = 3150 # uHz
 dnu_sun = 135.1 # uHz
@@ -11,6 +15,7 @@ taugran_sun = 210 # s
 teffred_sun = 8907 # K
 
 obs_available = ['kepler-sc', 'kepler-lc', 'tess-ffi']
+
 
 def from_phot(G, BP, RP, J, H, K, parallax, s=1., deltaT=1550., Amax_sun=2.5, obs='kepler-sc', T=30., pfalse=0.01, mass=1., AK=None, numax_limit=None, return_SNR=False):
     """
@@ -34,13 +39,20 @@ def from_phot(G, BP, RP, J, H, K, parallax, s=1., deltaT=1550., Amax_sun=2.5, ob
     """
     if obs not in obs_available:
         raise IOError('%s is not currently implemented as an observation mode, check documentation or probability.obs_available for available modes.' % obskm)
-    tlum = Kmag_to_lum(K, J-K, parallax, AK=AK, Mbol_sun=4.67) #luminosity in Lsun
-    tteff = J_K_Teff(J-K) #teff in K
+    if AK is not None:
+        JK = J-K-1.5*AK
+    else:
+        JK = J-K
+    tlum = Kmag_to_lum(K, JK, parallax, AK=AK, Mbol_sun=4.67) #luminosity in Lsun
+    tteff = J_K_Teff(JK) #teff in K
     trad = np.sqrt(tlum/(tteff/teff_sun)**4)
     if isinstance(mass, (int, float,np.float32,np.float64)):
         tmass = mass
         tnumax = numax(tmass, tteff, trad)
-        snrtot = SNR_tot(G, BP, RP, J, H, K, tlum, tmass, tteff, trad, s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
+        if AK is not None:
+            snrtot = SNR_tot(G, BP, RP, J-2.5*AK, H-1.55*AK, K-AK, tlum, tmass, tteff, trad, tnumax, s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
+        else:
+            snrtot = SNR_tot(G, BP, RP, J, H, K, tlum, tmass, tteff, trad, tnumax, s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
         probs = prob(snrtot, tnumax, T, pfalse)
         if numax_limit is not None:
             probs[tnumax < numax_limit] = 0.
@@ -52,10 +64,10 @@ def from_phot(G, BP, RP, J, H, K, parallax, s=1., deltaT=1550., Amax_sun=2.5, ob
             T = np.ones(len(G))*T
         ndata = len(J)
         msamples = np.random.lognormal(mean=np.log(1.2), sigma=0.4, size=ndata*100)
-        snrtots = SNR_tot(np.repeat(G,100),np.repeat(BP,100),np.repeat(RP,100),np.repeat(J,100),np.repeat(H,100),np.repeat(K,100),
-                          np.repeat(tlum,100), msamples, np.repeat(tteff,100), np.repeat(trad,100),
-                          s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
         tnumax = numax(msamples, np.repeat(tteff,100), np.repeat(trad,100))
+        snrtots = SNR_tot(np.repeat(G,100),np.repeat(BP,100),np.repeat(RP,100),np.repeat(J,100),np.repeat(H,100),np.repeat(K,100),
+                          np.repeat(tlum,100), msamples, np.repeat(tteff,100), np.repeat(trad,100), tnumax,
+                          s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
         probs = prob(snrtots,tnumax,np.repeat(T,100),pfalse)
         probs = probs.reshape(ndata,100)
         probs = np.median(probs, axis=1)
@@ -65,7 +77,82 @@ def from_phot(G, BP, RP, J, H, K, parallax, s=1., deltaT=1550., Amax_sun=2.5, ob
             return probs, np.median(snrtots.reshape(ndata,100),axis=1)
         return probs
 
-def numax_from_JHK(J, H, K, parallax, mass=1., return_samples=False, return_lum=False, AK=None):
+def do_one_grid(i, G, BP, RP, J, H, K, J_err, H_err, K_err, j, h, k, j_err, h_err, k_err, N, fullgrid,s,deltaT,Amax_sun, obs, T, pfalse):
+    tG = np.repeat(G[i], N)
+    tBP = np.repeat(BP[i], N)
+    tRP = np.repeat(RP[i], N)
+    tJ = norm(J[i], J_err[i]).rvs(N)
+    tH = norm(H[i], H_err[i]).rvs(N)
+    tK = norm(K[i], K_err[i]).rvs(N)
+    samples = grid.sample_from_grid(fullgrid,j[i],h[i],k[i],j_err[i],h_err[i],k_err[i], mask=None, N=N, p='mags')
+    snrtot = SNR_tot(tG, tBP, tRP, tJ, tH, tK, samples['luminosity'], samples['M_act'], samples['teff'], samples['radius'], samples['numax'], s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
+    tprobs = prob(snrtot,samples['numax'],np.repeat(T[i],N),pfalse)
+    return np.nanmedian(tprobs)
+
+
+def from_grid(G, BP, RP, J, H, K, parallax, J_err, H_err, K_err, parallax_err, s=1., deltaT=1550., Amax_sun=2.5, obs='kepler-sc', T=30., pfalse=0.01, AK=None, return_samples=False,  N=100, multiprocess=None, ptype='colormag'):
+    """
+    Seismic detection probability from Gaia and 2MASS photometry (and Parallax) using the PARSEC isochrone grid (quite slow for large samples!)
+    INPUT:
+        G, BP, RP, J, H, K - Gaia and 2MASS photometry
+        parallax - parallax from Gaia/other in mas
+        s, deltaT, Amax_sun - parameters for estimating the stellar oscillation signal (see Chaplin et al. 2011)
+        obs - the seismic observation mode, can be kepler-sc, kepler-lc, tess-ffi or tess-ctl currently
+        T - the length of the observations in days (e.g. 27 for a single sector of TESS)
+        pfalse - the probability of a false positive
+        AK - K band extinction
+        numax_limit - lower limt on detectable nu max (optional)
+        return_SNR - return the expected seismic SNR of the observation
+    OUTPUT:
+        probs - the detecton probability (1. for near definite detection)
+        SNR - if return_SNR, the predicted signal-to-noise ratio of the observation
+    HISTORY:
+        11/06/2020 - written - J T Mackereth (UoB)
+    """
+    if AK is None:
+        AK = np.zeros(len(G))
+    fullgrid = grid.fullPARSECgrid()
+    distmod = 5*np.log10(1000/parallax)-5
+    error_distmod = (-5/(parallax*np.log(10)))*parallax_err
+    j,h,k = J-distmod-(2.5*AK), H-distmod-(1.55*AK), K-distmod-AK
+    j_err, h_err, k_err = np.sqrt(J_err**2+error_distmod**2), np.sqrt(H_err**2+error_distmod**2), np.sqrt(K_err**2+error_distmod**2)
+    jk = J-K-1.5*AK
+    jk_err = np.sqrt(J_err**2+K_err**2)
+    if multiprocess is None:
+        if return_samples:
+            probs = np.zeros((len(G),N))
+            allsamples = np.zeros((len(G), N, 12))
+        else:
+            probs = np.zeros(len(G))
+        for i in tqdm.tqdm(range(len(G))):
+            tG = np.repeat(G[i], N)
+            tBP = np.repeat(BP[i], N)
+            tRP = np.repeat(RP[i], N)
+            tJ = norm(J[i], J_err[i]).rvs(N)
+            tH = norm(H[i], H_err[i]).rvs(N)
+            tK = norm(K[i], K_err[i]).rvs(N)
+            if ptype == 'mags':
+                samples = grid.sample_from_grid_jhk(fullgrid,j[i],h[i],k[i],j_err[i],h_err[i],k_err[i], mask=None, N=N)
+            if ptype == 'colormag':
+                samples = grid.sample_from_grid_jminuskh(fullgrid,jk[i],h[i], jk_err[i],h_err[i], mask=None, N=N)
+            snrtot = SNR_tot(tG, tBP, tRP, tJ, tH, tK, samples['luminosity'], samples['M_act'], samples['teff'], samples['radius'], samples['numax'], s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
+            tprobs = prob(snrtot,samples['numax'],np.repeat(T[i],N),pfalse)
+            if return_samples:
+                probs[i] = tprobs
+                allsamples[i] = np.dstack([samples['teff'], samples['radius'], samples['logg'], samples['luminosity'], samples['M_act'], samples['Z'], samples['age'], samples['numax'], samples['dnu'], samples['J'], samples['H'], samples['K']])[0]
+            else:
+                probs[i] = np.nanmedian(tprobs)
+    else:
+        do_one = partial(do_one_grid, G=G, BP=BP, RP=RP, J=J, H=H, K=K, J_err=J_err, H_err=H_err, K_err=K_err, j=j, h=h, k=k, j_err=j_err, h_err=h_err, k_err=k_err, N=N, fullgrid=fullgrid, s=s, deltaT=deltaT,Amax_sun=Amax_sun, obs=obs, T=T, pfalse=pfalse)
+        with Pool(processes=multiprocess) as pool:
+            probs = np.array(list(tqdm.tqdm_notebook(pool.imap(do_one, range(len(G))), total=len(G))))
+    if return_samples:
+        return probs, allsamples
+    return probs
+
+
+
+def numax_from_JHK(J, H, K, parallax, mass=1., return_samples=False, AK=None):
     """
     predict frequency at maximum power from 2MASS photometry and Gaia parallax
     INPUT:
@@ -81,7 +168,10 @@ def numax_from_JHK(J, H, K, parallax, mass=1., return_samples=False, return_lum=
         27/04/2020 - written - J T Mackereth (UoB)
     """
     tlum = Kmag_to_lum(K, J-K, parallax, AK=AK, Mbol_sun=4.67) #luminosity in Lsun
-    tteff = J_K_Teff(J-K) #teff in K
+    if AK is not None:
+        tteff = J_K_Teff(J-K-1.5*AK) #teff in K
+    else:
+        tteff = J_K_Teff(J-K)
     tteff /= teff_sun
     trad = np.sqrt(tlum/tteff**4)
     if isinstance(mass, (int, float,np.float32,np.float64)):
@@ -97,7 +187,8 @@ def numax_from_JHK(J, H, K, parallax, mass=1., return_samples=False, return_lum=
             return tnumax
         return np.median(tnumax, axis=1)
 
-def numax_from_luminosity_teff(luminosity, teff, parallax, mass=1., return_samples=False, return_lum=False, AK=None):
+
+def numax_from_luminosity_teff(luminosity, teff, mass=1., return_samples=False, AK=None):
     """
     predict frequency at maximum power from 2MASS photometry and Gaia parallax
     INPUT:
@@ -172,7 +263,7 @@ def prob(snr, numax, T, pfalse):
     snrthresh = chi2.ppf(pdet,2.*nbins)/(2.*nbins)-1.0
     return chi2.sf((snrthresh+1.0) / (snr+1.0)*2.0*nbins, 2.*nbins)
 
-def SNR_tot(G, BP, RP, J, H, K, lum, mass, teff, rad, s=1., deltaT=1550, Amax_sun=2.5, obs='kepler-sc'):
+def SNR_tot(G, BP, RP, J, H, K, lum, mass, teff, rad, numax, s=1., deltaT=1550, Amax_sun=2.5, obs='kepler-sc'):
     """
     predicted S/N for a given set of parameters
     INPUT:
@@ -203,8 +294,7 @@ def SNR_tot(G, BP, RP, J, H, K, lum, mass, teff, rad, s=1., deltaT=1550, Amax_su
         inst = 'tess'
         nu_nyq = 1e6/(2*cadence) #in uHz
     tP_tot = P_tot(lum, mass, teff, rad, s=s, deltaT=deltaT, Amax_sun=Amax_sun, nu_nyq=nu_nyq)
-    tnumax = numax(mass,teff,rad)
-    tB_tot = B_tot(G, BP, RP, J, H, K, lum, mass, teff, rad, tnumax, cadence, inst=inst, nu_nyq=nu_nyq, s=s, deltaT=deltaT, Amax_sun=Amax_sun)
+    tB_tot = B_tot(G, BP, RP, J, H, K, lum, mass, teff, rad, numax, cadence, inst=inst, nu_nyq=nu_nyq, s=s, deltaT=deltaT, Amax_sun=Amax_sun)
     return tB_tot
 
 def J_K_Teff(JK, FeH=None, err=None):

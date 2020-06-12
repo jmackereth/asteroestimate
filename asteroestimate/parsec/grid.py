@@ -29,7 +29,7 @@ def p_jminuskh(fullgrid, jk,h,jk_err,h_err, mask=None):
     mean = np.array([jk,h])
     cov = np.array([[jk_err**2,0],[0,h_err**2]])
     rv = multivariate_normal(mean, cov)
-    jhk_grid = np.dstack([fullgrid['J']-fullgrid['K'], fullgrid['H'])[0]
+    jhk_grid = np.dstack([fullgrid['J']-fullgrid['K'], fullgrid['H']])[0]
     return rv.pdf(jhk_grid)
 
 def sample_from_grid_jhk(fullgrid, j,h,k,j_err,h_err,k_err, mask=None, N=100):

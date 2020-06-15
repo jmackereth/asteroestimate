@@ -24,7 +24,7 @@ def p_jhk(fullgrid, j,h,k,j_err,h_err,k_err, mask=None):
     jhk_grid = np.dstack([fullgrid['J'][mask], fullgrid['H'][mask], fullgrid['K'][mask]])[0]
     return rv.pdf(jhk_grid)
 
-def p_jminuskh(fullgrid, jk,h,jk_err,h_err, mask=None):
+def p_jminuskh(fullgrid, jk,h,jk_err,h_err):
     "get the probability of each isochrone point for a given data point"
     mean = np.array([jk,h])
     cov = np.array([[jk_err**2,0],[0,h_err**2]])
@@ -41,6 +41,9 @@ def sample_from_grid_jhk(fullgrid, j,h,k,j_err,h_err,k_err, mask=None, N=100):
     sort = np.argsort(weights)
     tinter = interp1d(np.cumsum(weights[sort])/np.sum(weights), range(len(weights[sort])), kind='linear')
     randinds = np.round(tinter(np.random.rand(N))).astype(np.int64)
+    if np.any(randinds < 0):
+        #if the star is outside the grid - just sample completely random points from all the isochrones?
+        randinds = np.random.choice(len(fullgrid[sort]), size=N)
     return fullgrid[mask][sort][randinds]
 
 def sample_from_grid_jminuskh(fullgrid, jk, h, jk_err,h_err, N=100):
@@ -50,4 +53,7 @@ def sample_from_grid_jminuskh(fullgrid, jk, h, jk_err,h_err, N=100):
     sort = np.argsort(weights)
     tinter = interp1d(np.cumsum(weights[sort])/np.sum(weights), range(len(weights[sort])), kind='linear')
     randinds = np.round(tinter(np.random.rand(N))).astype(np.int64)
+    if np.any(randinds < 0):
+        #if the star is outside the grid - just sample completely random points from all the isochrones?
+        randinds = np.random.choice(len(fullgrid[sort]), size=N)
     return fullgrid[sort][randinds]

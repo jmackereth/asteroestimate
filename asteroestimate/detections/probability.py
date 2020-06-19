@@ -59,6 +59,19 @@ def from_phot(G, BP, RP, J, H, K, parallax, s=1., deltaT=1550., Amax_sun=2.5, ob
         if return_SNR:
             return probs, snrtot
         return probs
+    if isinstance(mass, np.ndarray):
+        tmass = mass
+        tnumax = numax(tmass, tteff, trad)
+        if AK is not None:
+            snrtot = SNR_tot(G, BP, RP, J-2.5*AK, H-1.55*AK, K-AK, tlum, tmass, tteff, trad, tnumax, s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
+        else:
+            snrtot = SNR_tot(G, BP, RP, J, H, K, tlum, tmass, tteff, trad, tnumax, s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
+        probs = prob(snrtot, tnumax, T, pfalse)
+        if numax_limit is not None:
+            probs[tnumax < numax_limit] = 0.
+        if return_SNR:
+            return probs, snrtot
+        return probs
     elif mass == 'giants':
         if isinstance(T, (float,np.float32,np.float64)):
             T = np.ones(len(G))*T
@@ -174,7 +187,7 @@ def numax_from_JHK(J, H, K, parallax, mass=1., return_samples=False, AK=None):
         tteff = J_K_Teff(J-K)
     tteff /= teff_sun
     trad = np.sqrt(tlum/tteff**4)
-    if isinstance(mass, (int, float,np.float32,np.float64)):
+    if isinstance(mass, (int, float,np.float32,np.float64,np.ndarray)):
         tmass = mass
         tnumax = numax(tmass, tteff*teff_sun, trad)
         return tnumax
@@ -391,7 +404,7 @@ def beta(teffred, teff, deltaT=1550):
             out = 1 - np.exp(-(teffred-teff)/deltaT)
     return out
 
-def A_max(rad,lum,teff,s=1., deltaT=1550, Amax_sun=2.5):
+def A_max(rad,lum,mass,teff,s=1., deltaT=1550, Amax_sun=2.5):
     """
     maximum oscillation intensity amplitude from (7) of Chaplin+(2011)
     INPUT:
@@ -407,7 +420,7 @@ def A_max(rad,lum,teff,s=1., deltaT=1550, Amax_sun=2.5):
     """
     tteffred = teffred(lum)
     tbeta = beta(tteffred, teff, deltaT=deltaT)
-    return  0.85*2.5*tbeta*(rad**1.85)*((teff/teff_sun)**0.57)
+    return  2.5*tbeta*(lum/mass)*(teff/teff_sun)**(-2.0)#0.85*2.5*tbeta*(rad**1.85)*((teff/teff_sun)**0.57)
 
 def P_tot(lum, mass, teff, rad, s=1., deltaT=1550, Amax_sun=2.5, nu_nyq=8486):
     """
@@ -424,7 +437,7 @@ def P_tot(lum, mass, teff, rad, s=1., deltaT=1550, Amax_sun=2.5, nu_nyq=8486):
     HISTORY:
         27/04/2020 - written - J T Mackereth (UoB)
     """
-    tA_max = A_max(rad, lum, teff, s=s, deltaT=deltaT, Amax_sun=Amax_sun)
+    tA_max = A_max(rad, lum, mass,teff, s=s, deltaT=deltaT, Amax_sun=Amax_sun)
     tnumax = numax(mass, teff, rad)
     #tdnu = dnu(mass, rad)
     eta = np.sin(np.pi/2.*(tnumax/nu_nyq))/(np.pi/2.*(tnumax/nu_nyq))
@@ -492,7 +505,7 @@ def B_tot(G, BP, RP, J, H, K, lum, mass, teff, rad, tnumax, cadence, inst='keple
     pgranalias[tnumax > nu_nyq] = P_gran((nu_nyq - (tnumax[tnumax > nu_nyq] - nu_nyq)), nu_nyq)
     pgranalias[tnumax <= nu_nyq] = P_gran((nu_nyq + (nu_nyq - tnumax[tnumax <= nu_nyq])), nu_nyq)
     totpgran = tP_gran + pgranalias
-    tA_max = A_max(rad, lum, teff, s=s, deltaT=deltaT, Amax_sun=Amax_sun)
+    tA_max = A_max(rad, lum, mass,teff, s=s, deltaT=deltaT, Amax_sun=Amax_sun)
     env_width = 0.66 * tnumax**0.88
     env_width[tnumax>100.] = tnumax[tnumax>100.]/2.
     tdnu = dnu_sun*(rad**-1.42)*((teff/teff_sun)**0.71)

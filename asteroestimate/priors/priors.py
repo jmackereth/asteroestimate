@@ -1,6 +1,6 @@
 import numpy as np
 from asteroestimate.detections import probability as prob
-from scipy.stats import norm, multivariate_normal
+from scipy.stats import norm, multivariate_normal, lognorm
 
 def numax_JHK(J, H, K, parallax, mass=1., AK=None, N_samples=1000):
     """
@@ -25,6 +25,9 @@ def numax_JHK(J, H, K, parallax, mass=1., AK=None, N_samples=1000):
     multi_norm = multivariate_normal(means, cov)
     samples = multi_norm.rvs(size=N_samples)
     Jsamp, Hsamp, Ksamp, parallaxsamp = samples[:,0], samples[:,1], samples[:,2], samples[:,3]
+    if mass == 'lognormalprior':
+        massprior = lognorm(np.log(1.5), 0.4)
+        mass = massprior.rvs(size=N_samples)
     numaxsamp = prob.numax_from_JHK(Jsamp, Hsamp, Ksamp, parallaxsamp, mass=mass, AK=AK)
     numax_mean = np.mean(numaxsamp)
     numax_sigma = np.std(numaxsamp)

@@ -2,7 +2,15 @@ import pandas as pd
 import os
 
 class catalog():
-    """ Class for handling a catalog """
+    """ Class for handling a TESS catalog from a CSV file prep'd by TED
+
+    Inputs
+    ------
+
+    catafile: str
+        The path to the TESS catalog.
+
+    """
 
     def __init__(self, catafile='~/Downloads/tess/TESS_CVZ_brightgiants_reduced_270820.csv'):
         self.catafile= catafile

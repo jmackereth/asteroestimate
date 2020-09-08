@@ -1,5 +1,5 @@
 # asteroestimate
-### python based detection probabilities and scaling relations for asteroseismology 
+### python based asteroseismic detection probabilities, priors and scaling relations 
 
 This module is intended to make it simple to estimate intrinsic stellar properties which are useful for asteroseismology (and other stellar astrophysics purposes) using simple observables. The main intention of the module is that it can be used for the estimation of the probability of asteroseismic detections in stars observed by long cadence photometric surveys using simple scaling relations and empirical relationships. To this end, it uses much of the theory and application outlined in [Chaplin et al. (2011)](https://ui.adsabs.harvard.edu/abs/2011ApJ...732...54C/abstract), and builds and borrows from available code from [Mathew Schofield's ATL](https://github.com/MathewSchofield/ATL_public/blob/master/ATL/DR.py) and the [code used in generating the Tess Input Catalogue](https://github.com/tessgi/ticgen).
 

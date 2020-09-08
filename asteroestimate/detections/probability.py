@@ -17,7 +17,7 @@ teffred_sun = 8907 # K
 obs_available = ['kepler-sc', 'kepler-lc', 'tess-ffi']
 
 
-def from_phot(G, BP, RP, J, H, K, parallax, s=1., deltaT=1550., Amax_sun=2.5, obs='kepler-sc', T=30., pfalse=0.01, mass=1., AK=None, numax_limit=None, return_SNR=False):
+def from_phot(G, BP, RP, J, H, K, parallax, s=1., deltaT=1550., Amax_sun=2.5, D=1., obs='kepler-sc', T=30., pfalse=0.01, mass=1., AK=None, numax_limit=None, return_SNR=False):
     """
     Seismic detection probability from Gaia and 2MASS photometry (and Parallax)
     INPUT:
@@ -50,9 +50,9 @@ def from_phot(G, BP, RP, J, H, K, parallax, s=1., deltaT=1550., Amax_sun=2.5, ob
         tmass = mass
         tnumax = numax(tmass, tteff, trad)
         if AK is not None:
-            snrtot = SNR_tot(G, BP, RP, J-2.5*AK, H-1.55*AK, K-AK, tlum, tmass, tteff, trad, tnumax, s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
+            snrtot = SNR_tot(G, BP, RP, J-2.5*AK, H-1.55*AK, K-AK, tlum, tmass, tteff, trad, tnumax, s=s, deltaT=deltaT, Amax_sun=Amax_sun, D=D, obs=obs)
         else:
-            snrtot = SNR_tot(G, BP, RP, J, H, K, tlum, tmass, tteff, trad, tnumax, s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
+            snrtot = SNR_tot(G, BP, RP, J, H, K, tlum, tmass, tteff, trad, tnumax, s=s, deltaT=deltaT, Amax_sun=Amax_sun, D=D, obs=obs)
         probs = prob(snrtot, tnumax, T, pfalse)
         if numax_limit is not None:
             probs[tnumax < numax_limit] = 0.
@@ -63,9 +63,9 @@ def from_phot(G, BP, RP, J, H, K, parallax, s=1., deltaT=1550., Amax_sun=2.5, ob
         tmass = mass
         tnumax = numax(tmass, tteff, trad)
         if AK is not None:
-            snrtot = SNR_tot(G, BP, RP, J-2.5*AK, H-1.55*AK, K-AK, tlum, tmass, tteff, trad, tnumax, s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
+            snrtot = SNR_tot(G, BP, RP, J-2.5*AK, H-1.55*AK, K-AK, tlum, tmass, tteff, trad, tnumax, s=s, deltaT=deltaT, Amax_sun=Amax_sun, D=D, obs=obs)
         else:
-            snrtot = SNR_tot(G, BP, RP, J, H, K, tlum, tmass, tteff, trad, tnumax, s=s, deltaT=deltaT, Amax_sun=Amax_sun, obs=obs)
+            snrtot = SNR_tot(G, BP, RP, J, H, K, tlum, tmass, tteff, trad, tnumax, s=s, deltaT=deltaT, Amax_sun=Amax_sun, D=D, obs=obs)
         probs = prob(snrtot, tnumax, T, pfalse)
         if numax_limit is not None:
             probs[tnumax < numax_limit] = 0.
@@ -269,14 +269,14 @@ def prob(snr, numax, T, pfalse):
     """
     env_width = 0.66 * numax**0.88
     env_width[numax>100.] = numax[numax>100.]/2.
-    tlen=T*86400.0 #T in seconds
+    tlen = T*24*60*60 #T in seconds
     bw=1e6/tlen #bin width in uHz
     nbins= 2*env_width//bw #number of independent freq. bins
     pdet = 1-pfalse
     snrthresh = chi2.ppf(pdet,2.*nbins)/(2.*nbins)-1.0
     return chi2.sf((snrthresh+1.0) / (snr+1.0)*2.0*nbins, 2.*nbins)
 
-def SNR_tot(G, BP, RP, J, H, K, lum, mass, teff, rad, numax, s=1., deltaT=1550, Amax_sun=2.5, obs='kepler-sc'):
+def SNR_tot(G, BP, RP, J, H, K, lum, mass, teff, rad, numax, s=1., deltaT=1550, Amax_sun=2.5, obs='kepler-sc', D=1):
     """
     predicted S/N for a given set of parameters
     INPUT:
@@ -297,18 +297,16 @@ def SNR_tot(G, BP, RP, J, H, K, lum, mass, teff, rad, numax, s=1., deltaT=1550, 
     if obs.lower() == 'kepler-sc':
         cadence = 58.85 #in s
         inst = 'kepler'
-        nu_nyq = 1e6/(2*cadence) #in uHz
     if obs.lower() == 'kepler-lc':
         cadence = 29.4*60 #in s
         inst = 'kepler'
-        nu_nyq = 1e6/(2*cadence) #in uHz
     if obs.lower() == 'tess-ffi':
         cadence = 30.*60. #in s
         inst = 'tess'
-        nu_nyq = 1e6/(2*cadence) #in uHz
-    tP_tot = P_tot(lum, mass, teff, rad, s=s, deltaT=deltaT, Amax_sun=Amax_sun, nu_nyq=nu_nyq)
+    nu_nyq = 1e6/(2*cadence) #in uHz
+    tP_tot = P_tot(lum, mass, teff, rad, s=s, deltaT=deltaT, Amax_sun=Amax_sun, nu_nyq=nu_nyq, D=D)
     tB_tot = B_tot(G, BP, RP, J, H, K, lum, mass, teff, rad, numax, cadence, inst=inst, nu_nyq=nu_nyq, s=s, deltaT=deltaT, Amax_sun=Amax_sun)
-    return tB_tot
+    return tP_tot/tB_tot
 
 def J_K_Teff(JK, FeH=None, err=None):
     """
@@ -420,9 +418,9 @@ def A_max(rad,lum,mass,teff,s=1., deltaT=1550, Amax_sun=2.5):
     """
     tteffred = teffred(lum)
     tbeta = beta(tteffred, teff, deltaT=deltaT)
-    return  2.5*tbeta*(lum/mass)*(teff/teff_sun)**(-2.0)#0.85*2.5*tbeta*(rad**1.85)*((teff/teff_sun)**0.57)
+    return  2.5*tbeta*(lum/mass)*(teff/teff_sun)**(-2.0);#0.85*2.5*tbeta*(rad)**2*(teff/teff_sun)**(0.5)#0.85*2.5*tbeta*(rad**1.85)*((teff/teff_sun)**0.57)
 
-def P_tot(lum, mass, teff, rad, s=1., deltaT=1550, Amax_sun=2.5, nu_nyq=8486):
+def P_tot(lum, mass, teff, rad, s=1., deltaT=1550, Amax_sun=2.5, nu_nyq=8486, D=1.):
     """
     total mean power in envelope
     INPUT:
@@ -444,7 +442,7 @@ def P_tot(lum, mass, teff, rad, s=1., deltaT=1550, Amax_sun=2.5, nu_nyq=8486):
     env_width = 0.66 * tnumax**0.88
     env_width[tnumax>100.] = tnumax[tnumax>100.]/2.
     tdnu = dnu_sun*(rad**-1.42)*((teff/teff_sun)**0.71)
-    return 0.5*2.94*tA_max**2.*(((2*env_width)/tdnu)*eta**2)
+    return 0.5*2.94*tA_max**2*(tnumax/tdnu)*(np.sinc(np.pi/2.0*(tnumax/nu_nyq)))**2*(D**-2)#0.5*2.94*tA_max**2.*(((2*env_width)/tdnu)*eta**2)
 
 def b_inst(G, BP, RP, J, H, K, cadence, inst='kepler'):
     """
@@ -465,7 +463,7 @@ def b_inst(G, BP, RP, J, H, K, cadence, inst='kepler'):
         return noise.tess_noise_model(G, BP, RP, cadence)
 
 
-def P_gran(tnumax, nu_nyq, ret_eta=False):
+def P_gran(tnumax, nu_nyq, ret_eta=False, D=1.):
     """
     granulation power at numax
     INPUT:
@@ -476,14 +474,13 @@ def P_gran(tnumax, nu_nyq, ret_eta=False):
     HISTORY:
         27/04/2020 - written - J T Mackereth (UoB)
     """
-    a_nomass = 0.85 * 3382*tnumax**-0.609 # multiply by 0.85 to convert to redder TESS bandpass.
-    b1 = 0.317 * tnumax**0.970
-    b2 = 0.948 * tnumax**0.992
-    Pgran = (((2*np.sqrt(2))/np.pi) * (a_nomass**2/b1) / (1 + ((tnumax/b1)**4)) + ((2*np.sqrt(2))/np.pi) * (a_nomass**2/b2) / (1 + ((tnumax/b2)**4)))
-    eta = np.sinc(tnumax/(2*nu_nyq))
-    Pgran = Pgran *  eta**2
-    if ret_eta:
-        return Pgran, eta
+
+    # modelF = np.zeros(len(tnumax))
+    # for i in range(len(tnumax)):
+    #     a = 0.85*3382*tnumax[i]**(-0.609)
+    #     b  = np.array([0.317*tnumax[i]**(0.970), 0.948*tnumax[i]**0.992])
+    #     modelF[i] = np.sum(((2*np.sqrt(2)/np.pi)*a**2/b)/(1+(tnumax[i]/b)**4))
+    Pgran = 0.2*(tnumax/numax_sun)**(-2.0)*(D**-2)#np.sinc(np.pi/2.*(tnumax/nu_nyq))**2*(D**-2)*modelF
     return Pgran
 
 def B_tot(G, BP, RP, J, H, K, lum, mass, teff, rad, tnumax, cadence, inst='kepler', nu_nyq=8486,  s=1., deltaT=1550, Amax_sun=2.5):
@@ -500,14 +497,13 @@ def B_tot(G, BP, RP, J, H, K, lum, mass, teff, rad, tnumax, cadence, inst='keple
         27/04/2020 - written - J T Mackereth (UoB)
     """
     tb_inst = b_inst(G, BP, RP, J, H, K, cadence, inst=inst)
-    tP_gran, teta = P_gran(tnumax, nu_nyq, ret_eta=True)
-    pgranalias = np.zeros(len(tnumax))
-    pgranalias[tnumax > nu_nyq] = P_gran((nu_nyq - (tnumax[tnumax > nu_nyq] - nu_nyq)), nu_nyq)
-    pgranalias[tnumax <= nu_nyq] = P_gran((nu_nyq + (nu_nyq - tnumax[tnumax <= nu_nyq])), nu_nyq)
-    totpgran = tP_gran + pgranalias
+    tP_gran = P_gran(tnumax, nu_nyq,)# ret_eta=True)
+    #pgranalias = np.zeros(len(tnumax))
+    #pgranalias[tnumax > nu_nyq] = P_gran((nu_nyq - (tnumax[tnumax > nu_nyq] - nu_nyq)), nu_nyq)
+    #pgranalias[tnumax <= nu_nyq] = P_gran((nu_nyq + (nu_nyq - tnumax[tnumax <= nu_nyq])), nu_nyq)
+    #totpgran = tP_gran + pgranalias
     tA_max = A_max(rad, lum, mass,teff, s=s, deltaT=deltaT, Amax_sun=Amax_sun)
-    env_width = 0.66 * tnumax**0.88
-    env_width[tnumax>100.] = tnumax[tnumax>100.]/2.
+    #env_width = 0.66 * tnumax**0.88
+    #env_width[tnumax>100.] = tnumax[tnumax>100.]/2.
     tdnu = dnu_sun*(rad**-1.42)*((teff/teff_sun)**0.71)
-    ptot = 0.5*2.94*tA_max**2.*((2.*env_width)/tdnu)*teta**2.
-    return ptot/((tb_inst+tP_gran)*2*env_width)#*1e-6 #1e-6 factor??
+    return ((2.e-6*tb_inst**2*cadence+tP_gran)*tnumax)#*2*env_width)#*1e-6 #1e-6 factor??

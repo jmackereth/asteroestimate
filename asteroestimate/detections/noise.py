@@ -28,7 +28,7 @@ def tess_noise_model(G, BP, RP, cadence):
         RP - G_RP magnitude (not used for kepler!)
         cadence - the integration time
     OUTPUT:
-        noise - the instrument noise in ppm/hour
+        noise - the instrument noise in ppm
     HISTORY:
         27/04/2020 - written - J T Mackereth (UoB)
     """
@@ -37,8 +37,14 @@ def tess_noise_model(G, BP, RP, cadence):
     mag = G
     integration = cadence/(60.) #cadence back to mins!
     tessmag = mag - 0.00522555*color**3 + 0.0891337*color**2 - 0.633923*color + 0.0324473
-    return get_oneSigmaNoise(integration, tessmag)
+    #return get_oneSigmaNoise(integration, tessmag)
+    return noise_fit_27min(G)
 
+
+def noise_fit_27min(G):
+    coeff= np.array([ 6.20408891e-06,  5.97152412e-05,  2.54251067e-04, -2.53740192e-03, -3.57921614e-02,  1.44013454e+00])
+    poly = np.poly1d(coeff)
+    return 10**poly(G)
 
 def get_oneHourNoiseLnsigma(TessMag):
         """
